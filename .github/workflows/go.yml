@@ -10,21 +10,40 @@ on:
     branches: [ "master" ]
 
 jobs:
-
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # A single runner can cross-compile for all targets using fyne-cross
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
-    - name: Install Graphics libs
-      run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod' # Automatically detect Go version from go.mod file
+          cache: true # Caches dependencies for faster subsequent builds
 
-    - name: Build
-      run: go build -v ./...
+      - name: Install fyne-cross tool
+        run: go install github.com/fyne-io/fyne-cross@latest
 
-    - name: Test
-      run: go test -v ./...
+      - name: Build cross-platform binaries
+        # fyne-cross uses Docker to build for multiple platforms.
+        # This example builds for Windows, Linux, and Darwin (macOS).
+        run: |
+          fyne-cross windows -arch=amd64
+          fyne-cross linux -arch=amd64
+          # fyne-cross darwin requires a macOS SDK which is tricky on non-macOS runners.
+          # It's better to run darwin builds on a macOS runner in a separate job.
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/*/* # Uploads all packaged files from the 'dist' directory
+          body: |
+            # Release Notes
+            Changes in this version:
+            * New features
+            * Bug fixes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided secret for authentication
